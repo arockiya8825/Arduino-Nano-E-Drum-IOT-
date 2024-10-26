@@ -1,0 +1,142 @@
+A basic implementation for an 8-channel MIDI E-Drum system using piezo sensors as drum inputs and sending MIDI messages:
+
+Required Components:
+
+1.Arduino board (e.g., Uno, Mega)
+2.Piezo sensors (for each drum pad)
+3.Resistors (typically 1MΩ for piezo sensors)
+4.MIDI cable or USB connection to your computer
+
+Key Features:
+
+*8 analog drum pads (using analog inputs)
+*Hi-hat pedal control (using a digital input)
+*Velocity-sensitive MIDI messages (0-127)
+*Sends MIDI Note On/Off messages
+
+Wiring:
+
+*Connect each piezo sensor to an analog pin on the Arduino.
+*The hi-hat pedal is connected to a digital pin to differentiate between open and closed states.
+*Optionally, connect the Arduino to your computer via USB or a standard MIDI cable using a MIDI interface.
+
+Arduino Code for 8-Channel MIDI E-Drum:
+
+ // MIDI Settings
+#define MIDI_CHANNEL 10         // Standard drum channel for MIDI
+#define MIDI_NOTE_ON 0x90       // Status byte for Note On message (0x90 | channel)
+#define MIDI_NOTE_OFF 0x80      // Status byte for Note Off message (0x80 | channel)
+#define MIDI_MAX_VELOCITY 127   // Maximum velocity value (0-127)
+
+// Analog Pins for Drum Pads
+#define NUMBER_OF_PADS 8        // Number of drum pads
+int padPin[NUMBER_OF_PADS] = {A0, A1, A2, A3, A4, A5, A6, A7};  // Analog inputs
+
+// Threshold for triggering each pad
+int padThreshold[NUMBER_OF_PADS] = {50, 50, 50, 50, 50, 50, 50, 50};  // Adjust as needed
+int padNote[NUMBER_OF_PADS] = {38, 40, 41, 43, 45, 46, 48, 49};       // MIDI notes for each drum pad
+
+// Pad States
+bool padActive[NUMBER_OF_PADS];
+int padLastValue[NUMBER_OF_PADS];
+
+// Hi-Hat Pedal
+#define HI_HAT_PEDAL_PIN 2      // Digital pin for hi-hat pedal (open/closed)
+#define HI_HAT_OPEN_NOTE 46     // MIDI note for open hi-hat
+#define HI_HAT_CLOSED_NOTE 42   // MIDI note for closed hi-hat
+bool hiHatClosed = false;
+
+void setup() {
+  Serial.begin(115200);         // Initialize serial communication (for MIDI over USB)
+
+  pinMode(HI_HAT_PEDAL_PIN, INPUT_PULLUP);  // Hi-hat pedal as input with pull-up resistor
+  
+  // Initialize pad states
+  for (int i = 0; i < NUMBER_OF_PADS; i++) {
+    padActive[i] = false;
+    padLastValue[i] = 0;
+  }
+}
+
+void loop() {
+  // Read the state of the hi-hat pedal
+  hiHatClosed = digitalRead(HI_HAT_PEDAL_PIN) == LOW;
+
+  // Loop through each pad
+  for (int i = 0; i < NUMBER_OF_PADS; i++) {
+    int padValue = analogRead(padPin[i]);
+
+    if (padValue > padThreshold[i] && !padActive[i]) {
+      // If pad is hit and not active, trigger a Note On
+      int velocity = map(padValue, padThreshold[i], 1023, 1, MIDI_MAX_VELOCITY);  // Map velocity
+      
+      // Determine if this is the hi-hat and handle open/closed
+      if (padNote[i] == HI_HAT_OPEN_NOTE) {
+        midiSendNoteOn(hiHatClosed ? HI_HAT_CLOSED_NOTE : HI_HAT_OPEN_NOTE, velocity);
+      } else {
+        midiSendNoteOn(padNote[i], velocity);
+      }
+      
+      padActive[i] = true;
+      padLastValue[i] = padValue;
+    }
+
+    if (padActive[i]) {
+      // If the pad was active, monitor if it is still being hit
+      if (padValue < padThreshold[i] - 20) {  // Pad released
+        midiSendNoteOff(padNote[i]);
+        padActive[i] = false;
+      }
+    }
+  }
+}
+
+// Function to send a Note On message
+void midiSendNoteOn(uint8_t note, uint8_t velocity) {
+  Serial.write(MIDI_NOTE_ON | (MIDI_CHANNEL - 1));  // Status byte for Note On
+  Serial.write(note);                               // MIDI note number
+  Serial.write(velocity);                           // Velocity
+}
+
+// Function to send a Note Off message
+void midiSendNoteOff(uint8_t note) {
+  Serial.write(MIDI_NOTE_OFF | (MIDI_CHANNEL - 1));  // Status byte for Note Off
+  Serial.write(note);                                // MIDI note number
+  Serial.write(0);                                   // Velocity 0 to indicate note off
+}
+
+Code Explanation:
+
+MIDI Configuration:
+
+MIDI_NOTE_ON and MIDI_NOTE_OFF define the status byte for MIDI messages.
+MIDI_CHANNEL is set to 10, the standard drum channel in the MIDI protocol.
+Pads and Hi-Hat Configuration:
+
+The code handles 8 analog drum pads, each mapped to a specific MIDI note (padNote[]).
+A threshold is defined to detect when the drum pad is hit (padThreshold[]).
+
+Hi-Hat Pedal:
+
+The hi-hat pedal is connected to a digital input pin (HI_HAT_PEDAL_PIN), and the state (open or closed) is used to differentiate between open and closed hi-hat notes.
+
+Velocity Calculation:
+
+The velocity of the drum hit is calculated by mapping the analog signal value (between the threshold and 1023) to the MIDI velocity range (1-127).
+
+MIDI Output:
+
+When a drum pad is hit, a Note On MIDI message is sent, and when the pad is released (drop in analog value), a Note Off message is sent.
+Running the Code:
+Upload the code to your Arduino.
+Connect the piezo sensors to the analog inputs and the hi-hat pedal to the digital input.
+Use a MIDI interface or USB to connect the Arduino to your computer.
+In Addictive Drums (or any other DAW), select the Arduino as a MIDI input device.
+Map the MIDI notes to the corresponding drum sounds in Addictive Drums.
+This basic code can be further customized to handle additional features like rim shots, advanced hi-hat control (open, half-open, closed), or choke cymbals.
+
+
+
+
+
+
